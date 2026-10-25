@@ -170,6 +170,14 @@ svg .bar{fill:var(--c);stroke:var(--c);stroke-width:1.4}
 svg .poly{fill:none;stroke:var(--c);stroke-width:2.6;stroke-linejoin:round}
 svg .pt{fill:var(--c);stroke:var(--panel);stroke-width:1.6}
 svg .vlabel{fill:var(--c)}
+svg .brk{fill:none;stroke:var(--ink);stroke-width:1.3}
+svg .brkbg{fill:var(--panel)}
+svg .axdrag{fill:transparent;touch-action:none}
+svg .axdrag.xd{cursor:ew-resize}
+svg .axdrag.yd{cursor:ns-resize}
+svg .axdrag:hover{fill:var(--accent);fill-opacity:.08}
+svg .draginfo{fill:var(--accent);font-size:13.5px;font-weight:600;font-family:var(--f-body)}
+body.capture svg .axdrag{display:none}
 svg .whisk{stroke:var(--c);stroke-width:2}
 svg .bx{fill:var(--c);fill-opacity:.2;stroke:var(--c);stroke-width:2}
 svg .medl{stroke:var(--c);stroke-width:3.5}
@@ -492,13 +500,13 @@ function refreshTable(focus){
   if(focus){ const el=w.querySelector(`input[data-r="${focus[0]}"][data-c="${focus[1]}"]`); if(el){el.focus();el.select();} }
 }
 function updCount(){ const n=S.data.rows.filter(r=>r.some(c=>String(c??"").trim()!=="")).length; const e=$("#nCount"); if(e)e.textContent=`자료 ${n}개`; }
-function dataChanged(){ S.an.start="";S.an.width=""; S.an.off=[]; ensureAn(); save(); }
+function dataChanged(){ S.an.start="";S.an.width=""; S.an.off=[]; S.an.scale={}; ensureAn(); save(); }
 
 function loadExample(key){
   const e=EX[key];
   S.dataKey=key;
   S.data={title:e.title,columns:clone(e.columns),units:clone(e.units),rows:clone(e.rows)};
-  S.an.valueCol=-1; S.an.groupCol=-2; S.an.start=""; S.an.width=""; S.an.off=[];
+  S.an.valueCol=-1; S.an.groupCol=-2; S.an.start=""; S.an.width=""; S.an.off=[]; S.an.scale={};
   if(Object.keys(e.sel).length) S.an.sel=clone(e.sel);
   let msg=key==="blank"?"빈 표를 준비했어요.":`'${e.title}' 자료를 불러왔어요.`;
   if(e.problem){ S.problem=clone(e.problem); S.problemFromEx=true; msg+=" 문제 설정도 이 자료에 맞게 채웠어요."; }
@@ -533,7 +541,7 @@ function loadFile(file){
     const cols=rows[0].concat(Array(w-rows[0].length).fill("")).map((c,i)=>c||`열${i+1}`);
     S.dataKey="file";
     S.data={title:file.name.replace(/\.[^.]+$/,""),columns:cols,rows:rows.slice(1).map(r=>r.concat(Array(w-r.length).fill(""))),units:[]};
-    S.an.valueCol=-1; S.an.groupCol=-2; S.an.start=""; S.an.width=""; S.an.off=[]; S.problemFromEx=false;
+    S.an.valueCol=-1; S.an.groupCol=-2; S.an.start=""; S.an.width=""; S.an.off=[]; S.an.scale={}; S.problemFromEx=false;
     ensureAn(); save(); render(); toast(`${file.name}에서 자료 ${S.data.rows.length}개를 불러왔어요.`);
   };
   fr.onerror=()=>toast("파일을 읽지 못했어요. 다른 파일로 다시 시도해 주세요.");
@@ -706,6 +714,11 @@ function yTicks(max,rel){
   const t=[]; for(let v=0;v<=top+1e-9;v+=step)t.push(rnd(v));
   return {top:rnd(top),ticks:t};
 }
+let chartSeq=0;
+function ticksTo(top,rel){ const st=niceStep(top/5,!rel); const t=[]; for(let v=0;v<=top+1e-9;v=rnd(v+st))t.push(v); return t; }
+function ticksRange(lo,hi,intish){ const st=niceStep((hi-lo)/6,intish); const t=[]; for(let v=rnd(Math.ceil(lo/st-1e-9)*st);v<=hi+1e-9;v=rnd(v+st))t.push(v); return t; }
+function axBand(axis,key,lo,hi,p0,len,min,max,x,y,w,h){ return `<rect class="axdrag ${axis}d" x="${x}" y="${y}" width="${w}" height="${h}" data-key="${key}" data-axis="${axis}" data-lo="${lo}" data-hi="${hi}" data-p0="${p0}" data-len="${len}" data-min="${min}" data-max="${max}"><title>${axis==="x"?"좌우로 끌어 가로축":"위아래로 끌어 세로축"}의 비율 바꾸기</title></rect>`; }
+function axNote(){ const on=Object.keys(S.an.scale||{}).length>0; return `<div class="row no-cap" style="margin-top:8px;gap:10px"><span class="note">가로축·세로축의 눈금 부분을 끌면 좌표평면의 비율을 바꿀 수 있어요. 같은 자료도 축의 비율에 따라 다르게 보여요.</span>${on?`<button class="btn" data-axreset type="button">축 원래대로</button>`:""}</div>`; }
 function numChartHTML(G,cl){
   const an=S.an, rel=an.rel, sep=an.mode==="separate"&&G.groups.length>1;
   if(!an.sel.hist&&!an.sel.poly) return `<div class="empty">히스토그램이나 도수분포다각형 버튼을 눌러 보세요.</div>`;
@@ -713,26 +726,34 @@ function numChartHTML(G,cl){
   const ymax=Math.max(...ys.flat(),rel?0.05:1);
   const yt=yTicks(ymax,rel);
   const draw=(idxs,H,title)=>{
-    const W=760,L=62,R=40,T=title?40:26,B=52, pw=W-L-R, ph=H-T-B;
-    const x0=an.sel.poly?cl.start-cl.width:cl.start, x1=an.sel.poly?cl.start+(cl.k+1)*cl.width:cl.start+cl.k*cl.width;
-    const X=v=>L+(v-x0)/(x1-x0)*pw, Y=v=>T+ph-(v/yt.top)*ph;
-    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(panelTitle(G,"chart"))}">`;
+    const W=760,L=62,R=40,T=title?40:26,B=52, pw=W-L-R, ph=H-T-B, base=T+ph, sc=an.scale||{};
+    const x0=an.sel.poly?cl.start-cl.width:cl.start, xDef=an.sel.poly?cl.start+(cl.k+1)*cl.width:cl.start+cl.k*cl.width;
+    const x1=sc.hx>x0?sc.hx:xDef, yTop=sc.hy>0?sc.hy:yt.top, yTk=sc.hy>0?ticksTo(yTop,rel):yt.ticks;
+    const brk=x0>0, GAP=brk?38:0, px0=L+GAP, ppw=pw-GAP;
+    const X=v=>px0+(v-x0)/(x1-x0)*ppw, Y=v=>T+ph-(v/yTop)*ph;
+    const cid="hclip"+(++chartSeq);
+    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(panelTitle(G,"chart"))}"><defs><clipPath id="${cid}"><rect x="${px0-6}" y="${T}" width="${ppw+12}" height="${ph+6}"/></clipPath></defs>`;
     if(title) s+=`<text class="gtitle" x="${L}" y="20">${title}</text>`;
-    yt.ticks.forEach(v=>{ s+=`<line class="gridl" x1="${L}" x2="${L+pw}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${L-8}" y="${Y(v)+4}" text-anchor="end">${rel?fmt(v,2):v}</text>`; });
-    const nb=Math.round((x1-x0)/cl.width), every=nb>16?2:1;
-    for(let i=0;i<=nb;i++){ const v=rnd(x0+i*cl.width); if(i%every)continue; s+=`<line class="axis" x1="${X(v)}" x2="${X(v)}" y1="${T+ph}" y2="${T+ph+5}"/><text class="tick" x="${X(v)}" y="${T+ph+20}" text-anchor="middle">${v}</text>`; }
+    yTk.forEach(v=>{ s+=`<line class="gridl" x1="${L}" x2="${L+pw}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${L-8}" y="${Y(v)+4}" text-anchor="end">${rel?fmt(v,2):v}</text>`; });
+    const nb=Math.round((x1-x0)/cl.width), every=Math.max(1,Math.ceil(nb/16));
+    for(let i=-1;i<500;i++){ const v=rnd(cl.start+i*cl.width); if(v>x1+1e-9)break; if(v<x0-1e-9)continue; const show=((i%every)+every)%every===0; s+=`<line class="axis" x1="${X(v)}" x2="${X(v)}" y1="${base}" y2="${base+5}"/>${show?`<text class="tick" x="${X(v)}" y="${base+20}" text-anchor="middle">${v}</text>`:""}`; }
     const op=idxs.length>1?0.22:0.42;
+    s+=`<g clip-path="url(#${cid})">`;
     if(an.sel.hist) idxs.forEach(gi=>{ const g=G.groups[gi]; ys[gi].forEach((y,i)=>{ if(y<=0)return; const a=X(cl.cls[i][0]),b=X(cl.cls[i][1]); s+=`<rect class="bar c${g.ci}" x="${a}" y="${Y(y)}" width="${b-a}" height="${Y(0)-Y(y)}" fill-opacity="${op}"/>`; }); });
     if(an.sel.poly) idxs.forEach(gi=>{ const g=G.groups[gi]; const pts=[[cl.start-cl.width/2,0],...ys[gi].map((y,i)=>[cl.cls[i][0]+cl.width/2,y]),[cl.start+cl.k*cl.width+cl.width/2,0]];
       s+=`<polyline class="poly c${g.ci}" points="${pts.map(p=>`${X(p[0])},${Y(p[1])}`).join(" ")}"/>`;
       pts.forEach(p=>s+=`<circle class="pt c${g.ci}" cx="${X(p[0])}" cy="${Y(p[1])}" r="4.2"/>`); });
-    if(idxs.length===1){ const gi=idxs[0], g=G.groups[gi]; ys[gi].forEach((y,i)=>{ if(y<=0)return; const cx=X(cl.cls[i][0]+cl.width/2); s+=`<text class="vlabel c${g.ci}" x="${cx}" y="${Y(y)-(an.sel.poly&&an.sel.hist?13:9)}" text-anchor="middle">${rel?fmt(y,2):y}</text>`; }); }
-    s+=`<line class="axis" x1="${L}" x2="${L+pw}" y1="${T+ph}" y2="${T+ph}"/><line class="axis" x1="${L}" x2="${L}" y1="${T-6}" y2="${T+ph}"/>`;
+    s+=`</g>`;
+    if(idxs.length===1){ const gi=idxs[0], g=G.groups[gi]; ys[gi].forEach((y,i)=>{ const mid=cl.cls[i][0]+cl.width/2; if(y<=0||y>yTop||mid>x1)return; s+=`<text class="vlabel c${g.ci}" x="${X(mid)}" y="${Y(y)-(an.sel.poly&&an.sel.hist?13:9)}" text-anchor="middle">${rel?fmt(y,2):y}</text>`; }); }
+    s+=`<line class="axis" x1="${L}" x2="${L+pw}" y1="${base}" y2="${base}"/><line class="axis" x1="${L}" x2="${L}" y1="${T-6}" y2="${base}"/>`;
+    if(brk){ const xb=L+GAP/2; s+=`<rect class="brkbg" x="${xb-4}" y="${base-3}" width="8" height="6"/><path class="brk" d="M${xb-4},${base-9} q4.5,4.5 0,9 q-4.5,4.5 0,9"/><path class="brk" d="M${xb+4},${base-9} q4.5,4.5 0,9 q-4.5,4.5 0,9"/>`; }
     s+=`<text class="alabel" x="6" y="${T-12}">${rel?"(상대도수)":`(${esc(cU())})`}</text>`;
-    s+=`<text class="alabel" x="${W-4}" y="${T+ph+40}" text-anchor="end">${G.unit?`${esc(G.vname)}(${esc(G.unit)})`:esc(G.vname)}</text>`;
+    s+=`<text class="alabel" x="${W-4}" y="${base+40}" text-anchor="end">${G.unit?`${esc(G.vname)}(${esc(G.unit)})`:esc(G.vname)}</text>`;
+    s+=axBand("x","hx",x0,x1,px0,ppw,x0+(xDef-x0)*0.25,x0+(xDef-x0)*6,px0,base-4,ppw,32);
+    s+=axBand("y","hy",0,yTop,base,ph,yt.top/8,yt.top*8,L-54,T,54,ph);
     return s+"</svg>";
   };
-  const out=cl.freq.some(f=>f.out)?`<p class="note">계급 밖의 값이 있어요. 첫 계급의 시작값을 확인해 주세요.</p>`:"";
+  const out=(cl.freq.some(f=>f.out)?`<p class="note">계급 밖의 값이 있어요. 첫 계급의 시작값을 확인해 주세요.</p>`:"")+axNote();
   if(sep) return `<div class="sepcharts">${G.groups.map((g,i)=>`<div class="svgwrap">${draw([i],300,`<tspan style="fill:var(--g${g.ci+1})">●</tspan> ${esc(g.name)}`)}</div>`).join("")}</div><p class="note" style="margin:6px 0 0">비교하기 쉽도록 두 그래프의 가로축과 세로축 눈금을 같게 맞췄어요.</p>${out}`;
   return `<div class="svgwrap">${draw(G.groups.map((_,i)=>i),420,"")}</div>${out}`;
 }
@@ -742,20 +763,22 @@ function catChartHTML(G){
   const yt=yTicks(Math.max(...ys.flat(),rel?0.05:1),rel);
   const draw=(idxs,H,title)=>{
     const W=760,L=62,R=24,T=title?40:26,B=46,pw=W-L-R,ph=H-T-B, n=cf.cats.length, slot=pw/n, bw=Math.min(46,slot*0.72/idxs.length);
-    const Y=v=>T+ph-(v/yt.top)*ph;
+    const sc=an.scale||{}, yTop=sc.by>0?sc.by:yt.top, yTk=sc.by>0?ticksTo(yTop,rel):yt.ticks;
+    const Y=v=>T+ph-(Math.min(v,yTop)/yTop)*ph;
     let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(panelTitle(G,"chart"))}">`;
     if(title) s+=`<text class="gtitle" x="${L}" y="20">${title}</text>`;
-    yt.ticks.forEach(v=>{ s+=`<line class="gridl" x1="${L}" x2="${L+pw}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${L-8}" y="${Y(v)+4}" text-anchor="end">${rel?fmt(v,2):v}</text>`; });
+    yTk.forEach(v=>{ s+=`<line class="gridl" x1="${L}" x2="${L+pw}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${L-8}" y="${Y(v)+4}" text-anchor="end">${rel?fmt(v,2):v}</text>`; });
     cf.cats.forEach((c,ci)=>{ const cx=L+slot*(ci+.5); const start=cx-bw*idxs.length/2;
       idxs.forEach((gi,k)=>{ const g=G.groups[gi], y=ys[gi][ci]; const x=start+k*bw; if(y>0) s+=`<rect class="bar c${g.ci}" x="${x+1}" y="${Y(y)}" width="${bw-2}" height="${Y(0)-Y(y)}" fill-opacity="0.75"/>`;
         s+=`<text class="vlabel c${g.ci}" x="${x+bw/2}" y="${Y(y)-6}" text-anchor="middle">${rel?fmt(y,2):y}</text>`; });
       s+=`<text class="alabel" x="${cx}" y="${T+ph+20}" text-anchor="middle" style="fill:var(--ink)">${esc(c)}</text>`; });
     s+=`<line class="axis" x1="${L}" x2="${L+pw}" y1="${T+ph}" y2="${T+ph}"/><line class="axis" x1="${L}" x2="${L}" y1="${T-6}" y2="${T+ph}"/>`;
     s+=`<text class="alabel" x="6" y="${T-12}">${rel?"(상대도수)":`(${esc(cU())})`}</text>`;
+    s+=axBand("y","by",0,yTop,T+ph,ph,yt.top/8,yt.top*8,L-54,T,54,ph);
     return s+"</svg>";
   };
-  if(sep) return `<div class="sepcharts">${G.groups.map((g,i)=>`<div class="svgwrap">${draw([i],290,`<tspan style="fill:var(--g${g.ci+1})">●</tspan> ${esc(g.name)}`)}</div>`).join("")}</div>`;
-  return `<div class="svgwrap">${draw(G.groups.map((_,i)=>i),400,"")}</div>${G.groups.length>1&&!rel&&new Set(G.groups.map(g=>g.values.length)).size>1?`<p class="note">두 집단의 자료 수가 달라요. 상대도수로 바꿔 비교해 보세요.</p>`:""}`;
+  if(sep) return `<div class="sepcharts">${G.groups.map((g,i)=>`<div class="svgwrap">${draw([i],290,`<tspan style="fill:var(--g${g.ci+1})">●</tspan> ${esc(g.name)}`)}</div>`).join("")}</div>${axNote()}`;
+  return `<div class="svgwrap">${draw(G.groups.map((_,i)=>i),400,"")}</div>${G.groups.length>1&&!rel&&new Set(G.groups.map(g=>g.values.length)).size>1?`<p class="note">두 집단의 자료 수가 달라요. 상대도수로 바꿔 비교해 보세요.</p>`:""}${axNote()}`;
 }
 
 /* 상자그림 */
@@ -797,24 +820,30 @@ function scatterHTML(G){
   if(!all.length) return `<div class="empty">두 변량의 값이 모두 있는 자료가 없어요.</div>`;
   const xs=all.map(p=>p[0]), ys=all.map(p=>p[1]);
   const ax=axisTicks(Math.min(...xs),Math.max(...xs),xs.every(Number.isInteger),true), ay=axisTicks(Math.min(...ys),Math.max(...ys),ys.every(Number.isInteger),true);
+  const sc=an.scale||{}, ax0=ax.hi, ay0=ay.hi;
+  if(sc.sx>ax.lo){ ax.hi=sc.sx; ax.t=ticksRange(ax.lo,ax.hi,xs.every(Number.isInteger)); }
+  if(sc.sy>ay.lo){ ay.hi=sc.sy; ay.t=ticksRange(ay.lo,ay.hi,ys.every(Number.isInteger)); }
   const xn=colLabel(an.valueCol), yn=colLabel(an.yCol);
   const sep=an.mode==="separate"&&P.length>1;
   const draw=(gs,H,title)=>{
     const W=760,L=62,R=30,T=title?48:34,B=58,pw=W-L-R,ph=H-T-B;
     const X=v=>L+(v-ax.lo)/(ax.hi-ax.lo)*pw, Y=v=>T+ph-(v-ay.lo)/(ay.hi-ay.lo)*ph;
-    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="산점도">`;
+    const cid="sclip"+(++chartSeq);
+    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="산점도"><defs><clipPath id="${cid}"><rect x="${L-6}" y="${T-6}" width="${pw+12}" height="${ph+12}"/></clipPath></defs>`;
     if(title) s+=`<text class="gtitle" x="${L}" y="20">${title}</text>`;
     ay.t.forEach(v=>{ s+=`<line class="gridl" x1="${L}" x2="${L+pw}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tick" x="${L-8}" y="${Y(v)+4}" text-anchor="end">${v}</text>`; });
     ax.t.forEach(v=>{ s+=`<line class="gridl" x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${T+ph}"/><text class="tick" x="${X(v)}" y="${T+ph+20}" text-anchor="middle">${v}</text>`; });
-    gs.forEach(g=>g.pts.forEach(p=>{ s+=`<circle class="dot c${g.ci}" cx="${X(p[0])}" cy="${Y(p[1])}" r="5.5"/>`; }));
+    s+=`<g clip-path="url(#${cid})">`; gs.forEach(g=>g.pts.forEach(p=>{ s+=`<circle class="dot c${g.ci}" cx="${X(p[0])}" cy="${Y(p[1])}" r="5.5"/>`; })); s+=`</g>`;
     s+=`<line class="axis" x1="${L}" x2="${L+pw}" y1="${T+ph}" y2="${T+ph}"/><line class="axis" x1="${L}" x2="${L}" y1="${T-6}" y2="${T+ph}"/>`;
     s+=`<text class="alabel" x="6" y="${T-14}">${esc(yn)}</text>`;
     s+=`<text class="alabel" x="${W-4}" y="${T+ph+42}" text-anchor="end">${esc(xn)}</text>`;
+    s+=axBand("x","sx",ax.lo,ax.hi,L,pw,ax.lo+(ax0-ax.lo)*0.25,ax.lo+(ax0-ax.lo)*6,L,T+ph-4,pw,32);
+    s+=axBand("y","sy",ay.lo,ay.hi,T+ph,ph,ay.lo+(ay0-ay.lo)*0.25,ay.lo+(ay0-ay.lo)*6,L-54,T,54,ph);
     return s+"</svg>";
   };
   const note=`<p class="note" style="margin:8px 0 0">한쪽 변량의 값이 커질 때 다른 쪽 변량의 값은 어떻게 변하는지, 점들이 어떤 모양으로 모여 있는지 살펴보세요.</p>`;
-  if(sep) return `<div class="sepcharts">${P.map(g=>`<div class="svgwrap">${draw([g],380,`<tspan style="fill:var(--g${g.ci+1})">●</tspan> ${esc(g.name)} (${g.pts.length})`)}</div>`).join("")}</div><p class="note" style="margin:6px 0 0">비교하기 쉽도록 산점도의 눈금을 같게 맞췄어요.</p>${note}`;
-  return `<div class="svgwrap">${draw(P,460,"")}</div>${note}`;
+  if(sep) return `<div class="sepcharts">${P.map(g=>`<div class="svgwrap">${draw([g],380,`<tspan style="fill:var(--g${g.ci+1})">●</tspan> ${esc(g.name)} (${g.pts.length})`)}</div>`).join("")}</div><p class="note" style="margin:6px 0 0">비교하기 쉽도록 산점도의 눈금을 같게 맞췄어요.</p>${note}${axNote()}`;
+  return `<div class="svgwrap">${draw(P,460,"")}</div>${note}${axNote()}`;
 }
 
 /* ---------- 4 결과 해석 ---------- */
@@ -853,7 +882,8 @@ document.addEventListener("click",e=>{
   const an=S.an;
   if(t.dataset.stat){ an.stats[t.dataset.stat]=!an.stats[t.dataset.stat]; save(); render(); return; }
   if(t.dataset.v){ an.sel[t.dataset.v]=!an.sel[t.dataset.v]; save(); render(); return; }
-  if(t.hasAttribute("data-rel")){ an.rel=!an.rel; save(); render(); return; }
+  if(t.hasAttribute("data-axreset")){ S.an.scale={}; save(); render(); return; }
+  if(t.hasAttribute("data-rel")){ an.rel=!an.rel; if(an.scale){delete an.scale.hy;delete an.scale.by;} save(); render(); return; }
   if(t.dataset.mode){ an.mode=t.dataset.mode; save(); render(); return; }
   if(t.dataset.chip!==undefined){ const n=t.dataset.chip; an.off=an.off.includes(n)?an.off.filter(x=>x!==n):[...an.off,n]; save(); render(); return; }
   if(t.id==="clAuto"){ an.start=""; an.width=""; save(); render(); return; }
@@ -886,13 +916,13 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   const t=e.target;
-  if(t.id==="selVal"){ S.an.valueCol=+t.value; if(S.an.groupCol===S.an.valueCol)S.an.groupCol=-1; if(S.an.yCol===S.an.valueCol)S.an.yCol=-1; S.an.start="";S.an.width="";S.an.off=[]; save(); render(); return; }
+  if(t.id==="selVal"){ S.an.valueCol=+t.value; if(S.an.groupCol===S.an.valueCol)S.an.groupCol=-1; if(S.an.yCol===S.an.valueCol)S.an.yCol=-1; S.an.scale={}; S.an.start="";S.an.width="";S.an.off=[]; save(); render(); return; }
   if(t.id==="unitX"||t.id==="unitY"){ const ci=t.id==="unitX"?S.an.valueCol:S.an.yCol; S.data.units=S.data.units||[]; S.data.units[ci]=t.value.trim(); save(); render(); return; }
   if(t.id==="cunitIn"){ S.an.cunit=t.value.trim()||"명"; save(); render(); return; }
-  if(t.id==="selY"){ S.an.yCol=+t.value; save(); render(); return; }
+  if(t.id==="selY"){ S.an.yCol=+t.value; if(S.an.scale)delete S.an.scale.sy; save(); render(); return; }
   if(t.id==="selGrp"){ S.an.groupCol=+t.value; S.an.off=[]; save(); render(); return; }
-  if(t.id==="clStart"){ S.an.start=t.value.trim(); save(); render(); return; }
-  if(t.id==="clWidth"){ const v=parseFloat(t.value); if(!(v>0)){toast("계급의 크기는 0보다 큰 수로 적어 주세요."); S.an.width="";} else S.an.width=t.value.trim(); save(); render(); return; }
+  if(t.id==="clStart"){ S.an.start=t.value.trim(); if(S.an.scale)delete S.an.scale.hx; save(); render(); return; }
+  if(t.id==="clWidth"){ if(S.an.scale)delete S.an.scale.hx; const v=parseFloat(t.value); if(!(v>0)){toast("계급의 크기는 0보다 큰 수로 적어 주세요."); S.an.width="";} else S.an.width=t.value.trim(); save(); render(); return; }
   if(t.id==="csvIn"){ loadFile(t.files[0]); t.value=""; return; }
 });
 document.addEventListener("keydown",e=>{
@@ -913,6 +943,29 @@ document.addEventListener("paste",e=>{
 ["dragover","dragenter"].forEach(ev=>document.addEventListener(ev,e=>{ if(S.tab!=="collect")return; if(e.dataTransfer&&[...e.dataTransfer.types].includes("Files")){ e.preventDefault(); const s=$("#srcs"); if(s)s.classList.add("drop"); } }));
 ["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{ const s=$("#srcs"); if(s&&(ev==="drop"||e.target===document.documentElement||!e.relatedTarget))s.classList.remove("drop"); }));
 document.addEventListener("drop",e=>{ if(S.tab!=="collect")return; if(e.dataTransfer&&e.dataTransfer.files.length){ e.preventDefault(); loadFile(e.dataTransfer.files[0]); } });
+
+/* ---------- 축 끌어서 좌표평면 비율 바꾸기 ---------- */
+let axDrag=null, axRaf=0;
+document.addEventListener("pointerdown",e=>{
+  const b=e.target.closest&&e.target.closest(".axdrag"); if(!b)return;
+  e.preventDefault();
+  const svg=b.ownerSVGElement, rect=svg.getBoundingClientRect(), sf=svg.viewBox.baseVal.width/rect.width;
+  const d=b.dataset, lo=+d.lo, hi=+d.hi, p0=+d.p0, len=+d.len, isX=d.axis==="x";
+  const pos=ev=>isX?((ev.clientX-rect.left)*sf-p0):(p0-(ev.clientY-rect.top)*sf);
+  const dist=pos(e); if(dist<12)return;
+  axDrag={key:d.key,lo,v:lo+dist/len*(hi-lo),len,pos,min:+d.min,max:+d.max};
+  S.an.scale=S.an.scale||{};
+});
+document.addEventListener("pointermove",e=>{
+  if(!axDrag)return;
+  const dist=axDrag.pos(e); if(dist<10)return;
+  let hi=axDrag.lo+(axDrag.v-axDrag.lo)*axDrag.len/dist;
+  hi=Math.min(axDrag.max,Math.max(axDrag.min,hi));
+  S.an.scale[axDrag.key]=hi;
+  if(!axRaf) axRaf=requestAnimationFrame(()=>{ axRaf=0; render(); });
+});
+function endAxDrag(){ if(!axDrag)return; axDrag=null; save(); render(); }
+document.addEventListener("pointerup",endAxDrag); document.addEventListener("pointercancel",endAxDrag);
 
 /* ---------- 채우기 핸들 (자동 복사) ---------- */
 let fillSrc=null, drag=null;
