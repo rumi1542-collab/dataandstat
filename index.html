@@ -314,6 +314,8 @@ if(!S.data.units) S.data.units=[];
 if(!S.an.cunit) S.an.cunit="명";
 if(!S.an.sel){ const v=S.an.view,l=S.an.layers||{}; S.an.sel={stem:v==="stem",table:v==="table",hist:v==="chart"&&!!l.hist,poly:v==="chart"&&!!l.poly,box:v==="box",scatter:v==="scatter"}; }
 if(S.dataKey==="height"&&S.data.columns.length===3&&S.data.columns[2]==="키(cm)"){ S.data.columns=clone(EX.height.columns); S.data.rows=clone(EX.height.rows); }
+/* 새로 접속하면 항상 '문제 설정'부터 시작 (같은 탭에서 새로고침하면 보던 단계 유지) */
+try{ const t=sessionStorage.getItem(KEY+":tab"); S.tab=["problem","collect","analyze","result"].includes(t)?t:"problem"; }catch(e){ S.tab="problem"; }
 let saveT=null;
 function save(){ clearTimeout(saveT); saveT=setTimeout(()=>{ try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} },250); }
 
@@ -437,7 +439,7 @@ function getPairs(G){
 }
 
 /* ================= 렌더: 공통 ================= */
-function setTab(t){ S.tab=t; save(); render(); try{window.scrollTo({top:0});}catch(e){} }
+function setTab(t){ S.tab=t; try{sessionStorage.setItem(KEY+":tab",t);}catch(e){} save(); render(); try{window.scrollTo({top:0});}catch(e){} }
 function render(){
   document.querySelectorAll(".step").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===S.tab)));
   ensureAn();
