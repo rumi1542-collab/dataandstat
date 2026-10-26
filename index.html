@@ -79,7 +79,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .hint-box b{color:var(--ink)}
 
 /* collect */
-.srcs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.srcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .src{position:relative;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:4px;min-width:0}
 .src:hover{border-color:var(--accent)}
 .src.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
@@ -87,6 +87,19 @@ button,input,select,textarea{font:inherit;color:inherit}
 .src b{font-size:15px;line-height:1.35}
 .src span{font-size:12.5px;color:var(--muted)}
 .src input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+[hidden]{display:none!important}
+.srcwrap{position:relative;min-width:0;display:flex}
+.srcwrap>.src{flex:1;width:100%}
+.prephead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.prepmenu{position:absolute;top:calc(100% + 6px);right:0;width:max(100%,340px);max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px;z-index:30;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.pmitem{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:9px 10px;font-size:14px;cursor:pointer;color:var(--ink)}
+.pmitem:hover,.pmitem:focus-visible{background:var(--panel2);outline:none}
+.pmitem.cur{background:var(--accent-soft)}
+.pmn{font-size:12.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pmsep{border-top:1px solid var(--line);margin:4px 6px}
+.pmnote{margin:0;padding:6px 10px 4px;font-size:12px;color:var(--muted)}
+.confirm{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--warn-soft);color:var(--warn);border-radius:var(--r);padding:10px 14px;font-size:14px}
+.confirm .cbtns{display:flex;gap:8px}
 .drop{outline:2px dashed var(--accent);outline-offset:6px;border-radius:var(--r)}
 .tbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .tbar .grow{flex:1 1 220px;display:flex;align-items:center;gap:8px;min-width:0}
@@ -259,7 +272,7 @@ body.capture .cap-exit{display:inline-flex;position:fixed;top:calc(12px + env(sa
       <li><button class="step" role="tab" data-tab="result" id="t-result"><span class="no">4</span>결과 해석</button></li>
     </ul>
     <div class="side-foot">
-      <span>입력한 내용은 이 브라우저에 자동 저장돼요.</span>
+      <span>입력한 내용은 이 창을 닫기 전까지 유지돼요. 새로 접속하면 빈 상태로 시작해요.</span>
       <button class="linkbtn" id="resetAll" type="button">처음 상태로 되돌리기</button>
     </div>
   </nav>
@@ -286,7 +299,10 @@ const EX={
     rows:[...A1.map((v,i)=>[String(i+1),"1학년",v]),...A2.map((v,i)=>[String(A1.length+i+1),"2학년",v])],
     problem:{topic:"우리 학교 학생들이 좋아하는 동물",question:"A중학교 1학년과 2학년 학생들이 가장 좋아하는 동물은 같을까?",target:"A중학교 1학년 30명, 2학년 30명",variable:"좋아하는 동물",method:"학급 설문 조사 (가상 자료)",guess:""},
     sel:{hist:true}},
-  blank:{title:"우리 반 자료",columns:["번호","집단","변량"],units:["","",""],rows:Array.from({length:10},(_,i)=>[String(i+1),"",""]),problem:null,sel:{}}
+  textbook:{title:"다온이네 반 학생 28명의 하루 독서 시간",columns:["번호","독서 시간"],units:["","분"],
+    rows:[20,25,35,40,45,46,50,55,56,56,57,60,60,60,62,62,63,64,65,65,65,66,66,68,69,70,71,75].map((v,i)=>[String(i+1),String(v)]),
+    problem:null,clearProblem:true,sel:{}},
+  blank:{title:"우리 반 자료",columns:["번호","집단","변량"],units:["","",""],rows:Array.from({length:10},()=>["","",""]),problem:null,sel:{}}
 };
 const PROBLEM_FIELDS=[
   ["topic","탐구 주제","예: 우리 학교 1학년 학생들의 키",false],
@@ -296,7 +312,7 @@ const PROBLEM_FIELDS=[
   ["method","자료 수집 방법","예: 설문 조사, 직접 측정, 공공 데이터",false],
   ["guess","예상해 보기","자료를 모으기 전에 결과를 예상하고 그 까닭을 적어 보세요.",true]
 ];
-const KEY="tonggye-tamgu-v2";
+const KEY="tonggye-tamgu-v3";
 const clone=o=>JSON.parse(JSON.stringify(o));
 
 function freshState(){
@@ -308,16 +324,15 @@ function freshState(){
     result:{who:"",text:""}};
 }
 let S;
-try{ const raw=localStorage.getItem(KEY); S=raw?JSON.parse(raw):null; }catch(e){ S=null; }
+try{ localStorage.removeItem("tonggye-tamgu-v1"); localStorage.removeItem("tonggye-tamgu-v2"); }catch(e){}
+try{ const raw=sessionStorage.getItem(KEY); S=raw?JSON.parse(raw):null; }catch(e){ S=null; }
 if(!S||!S.data||!S.an) S=freshState();
 if(!S.data.units) S.data.units=[];
 if(!S.an.cunit) S.an.cunit="명";
 if(!S.an.sel){ const v=S.an.view,l=S.an.layers||{}; S.an.sel={stem:v==="stem",table:v==="table",hist:v==="chart"&&!!l.hist,poly:v==="chart"&&!!l.poly,box:v==="box",scatter:v==="scatter"}; }
 if(S.dataKey==="height"&&S.data.columns.length===3&&S.data.columns[2]==="키(cm)"){ S.data.columns=clone(EX.height.columns); S.data.rows=clone(EX.height.rows); }
-/* 새로 접속하면 항상 '문제 설정'부터 시작 (같은 탭에서 새로고침하면 보던 단계 유지) */
-try{ const t=sessionStorage.getItem(KEY+":tab"); S.tab=["problem","collect","analyze","result"].includes(t)?t:"problem"; }catch(e){ S.tab="problem"; }
 let saveT=null;
-function save(){ clearTimeout(saveT); saveT=setTimeout(()=>{ try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} },250); }
+function save(){ clearTimeout(saveT); saveT=setTimeout(()=>{ try{sessionStorage.setItem(KEY,JSON.stringify(S));}catch(e){} },250); }
 
 /* ================= 유틸 ================= */
 const $=s=>document.querySelector(s);
@@ -439,7 +454,7 @@ function getPairs(G){
 }
 
 /* ================= 렌더: 공통 ================= */
-function setTab(t){ S.tab=t; try{sessionStorage.setItem(KEY+":tab",t);}catch(e){} save(); render(); try{window.scrollTo({top:0});}catch(e){} }
+function setTab(t){ S.tab=t; save(); render(); try{window.scrollTo({top:0});}catch(e){} }
 function render(){
   document.querySelectorAll(".step").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===S.tab)));
   ensureAn();
@@ -473,9 +488,9 @@ function viewCollect(){
   `<div class="srcs" id="srcs">
     <button class="src${k==="blank"?" on":""}" data-ex="blank" type="button"><span class="tag">직접 입력</span><b>빈 표로 시작</b><span>번호 · 집단 · 변량 열이 준비돼요</span></button>
     <label class="src${k==="file"?" on":""}" for="csvIn"><span class="tag">파일</span><b>CSV 파일 불러오기</b><span>첫 줄은 열 이름 · 끌어다 놓아도 돼요</span><input type="file" id="csvIn" accept=".csv,.tsv,.txt,text/csv"></label>
-    <button class="src${k==="animal"?" on":""}" data-ex="animal" type="button"><span class="tag">예시 · 범주 자료</span><b>A중학교 학생들이 좋아하는 동물</b><span>1학년 30명 · 2학년 30명 (가상 자료)</span></button>
-    <button class="src${k==="height"?" on":""}" data-ex="height" type="button"><span class="tag">예시 · 수량 자료</span><b>A중학교 1학년 학생들의 키</b><span>1반 25명 · 2반 28명 · 키와 몸무게 (가상 자료)</span></button>
+    ${prepCardHTML(k)}
   </div>
+  <div class="confirm" id="loadConfirm" hidden role="alert"><span>지금 표에 입력한 값이 있어요. 이 자료로 바꿀까요?</span><span class="cbtns"><button class="btn primary" id="cfYes" type="button">바꾸기</button><button class="btn" id="cfNo" type="button">그대로 두기</button></span></div>
   <div class="card">
     <div class="tbar">
       <div class="grow"><label for="dTitle" class="small muted" style="white-space:nowrap">자료 제목</label><input id="dTitle" value="${esc(S.data.title)}"></div>
@@ -504,6 +519,30 @@ function refreshTable(focus){
 function updCount(){ const n=S.data.rows.filter(r=>r.some(c=>String(c??"").trim()!=="")).length; const e=$("#nCount"); if(e)e.textContent=`자료 ${n}개`; }
 function dataChanged(){ S.an.start="";S.an.width=""; S.an.off=[]; S.an.scale={}; ensureAn(); save(); }
 
+const PREP=[
+  {key:"animal",ex:true,label:"A중학교 학생들이 좋아하는 동물",n:"60명",short:"좋아하는 동물",sub:"A중학교 1·2학년 60명 (예시)"},
+  {key:"height",ex:true,label:"A중학교 1학년 학생들의 키",n:"53명",short:"1학년 키와 몸무게",sub:"A중학교 1반·2반 53명 (예시)"},
+  {sep:true},
+  {key:"textbook",label:"다온이네 반 학생 28명의 하루 독서 시간",n:"28명",short:"하루 독서 시간",sub:"다온이네 반 학생 28명"}
+];
+let pendingKey=null;
+function prepCardHTML(k){
+  const cur=PREP.find(p=>p.key===k);
+  return `<div class="srcwrap" id="prepWrap"><button class="src${cur?" on":""}" id="prepBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="prepMenu">
+    <span class="tag">${cur?"자료 불러오기":"준비된 자료"}</span><b class="prephead"><span>${cur?esc(cur.short):"자료 불러오기"}</span><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></b><span>${cur?esc(cur.sub):"교과서 · 예시 자료"}</span></button>
+    <div class="prepmenu" id="prepMenu" role="menu" hidden>
+      ${PREP.map(p=>p.sep?`<div class="pmsep" role="separator"></div>`:`<button class="pmitem${p.key===k?" cur":""}" role="menuitem" data-pick="${p.key}" type="button"><span>${p.ex?`<span class="muted">(예시)</span> `:""}${esc(p.label)}</span><span class="pmn">${p.n}</span></button>`).join("")}
+      <div class="pmsep" role="separator"></div>
+      <p class="pmnote">(예시) 자료를 고르면 문제 설정도 함께 채워져요.</p>
+    </div></div>`;
+}
+function setMenu(open){ const m=$("#prepMenu"), b=$("#prepBtn"); if(!m)return; m.hidden=!open; b.setAttribute("aria-expanded",String(open)); if(open){ const f=m.querySelector(".pmitem"); if(f)f.focus(); } }
+function needsConfirm(){ if(S.dataKey!=="custom")return false; const num=/번호/.test(S.data.columns[0]||""); return S.data.rows.some(r=>r.some((v,j)=>!(j===0&&num)&&String(v??"").trim()!=="")); }
+function requestLoad(key){
+  setMenu(false);
+  if(needsConfirm()){ pendingKey=key; const c=$("#loadConfirm"); if(c){ c.hidden=false; const y=$("#cfYes"); if(y)y.focus(); } return; }
+  loadExample(key);
+}
 function loadExample(key){
   const e=EX[key];
   S.dataKey=key;
@@ -511,7 +550,8 @@ function loadExample(key){
   S.an.valueCol=-1; S.an.groupCol=-2; S.an.start=""; S.an.width=""; S.an.off=[]; S.an.scale={};
   if(Object.keys(e.sel).length) S.an.sel=clone(e.sel);
   let msg=key==="blank"?"빈 표를 준비했어요.":`'${e.title}' 자료를 불러왔어요.`;
-  if(e.problem){ S.problem=clone(e.problem); S.problemFromEx=true; msg+=" 문제 설정도 이 자료에 맞게 채웠어요."; }
+  if(e.clearProblem){ S.problem={}; S.problemFromEx=false; msg+=" 문제 설정은 비어 있어요. 직접 적어 보세요."; }
+  else if(e.problem){ S.problem=clone(e.problem); S.problemFromEx=true; msg+=" 문제 설정도 이 자료에 맞게 채웠어요."; }
   else if(S.problemFromEx){ S.problem={}; S.problemFromEx=false; msg+=" 예시로 채웠던 문제 설정은 비웠어요."; }
   ensureAn(); save(); render(); toast(msg);
 }
@@ -877,10 +917,15 @@ function autoGrow(t){ if(!t)return; t.style.height="auto"; t.style.height=Math.m
 
 /* ================= 이벤트 ================= */
 document.addEventListener("click",e=>{
+  const m=$("#prepMenu"); if(m&&!m.hidden&&!e.target.closest("#prepWrap")) setMenu(false);
   const t=e.target.closest("button,[data-ex]"); if(!t)return;
+  if(t.id==="prepBtn"){ setMenu($("#prepMenu").hidden); return; }
+  if(t.dataset.pick){ requestLoad(t.dataset.pick); return; }
+  if(t.id==="cfYes"){ const k=pendingKey; pendingKey=null; $("#loadConfirm").hidden=true; if(k)loadExample(k); return; }
+  if(t.id==="cfNo"){ pendingKey=null; $("#loadConfirm").hidden=true; return; }
   if(t.dataset.tab){ setTab(t.dataset.tab); return; }
   if(t.dataset.go){ setTab(t.dataset.go); return; }
-  if(t.dataset.ex){ loadExample(t.dataset.ex); return; }
+  if(t.dataset.ex){ requestLoad(t.dataset.ex); return; }
   const an=S.an;
   if(t.dataset.stat){ an.stats[t.dataset.stat]=!an.stats[t.dataset.stat]; save(); render(); return; }
   if(t.dataset.v){ an.sel[t.dataset.v]=!an.sel[t.dataset.v]; save(); render(); return; }
@@ -896,20 +941,20 @@ document.addEventListener("click",e=>{
   if(t.dataset.act==="addrow"){ S.data.rows.push(Array(S.data.columns.length).fill("")); const ri=S.data.rows.length-1; if(/번호/.test(S.data.columns[0]||"")) S.data.rows[ri][0]=String(ri+1); save(); refreshTable([ri,Math.min(1,S.data.columns.length-1)]); const w=$("#tbl"); if(w)w.scrollTop=w.scrollHeight; return; }
   if(t.dataset.act==="addcol"){ S.data.columns.push(`열${S.data.columns.length+1}`); S.data.rows.forEach(r=>r.push("")); S.data.units=S.data.units||[]; S.data.units[S.data.columns.length-1]=""; save(); refreshTable(); return; }
   if(t.dataset.act==="clear"){
-    if(t.dataset.armed){ S.data.rows=Array.from({length:10},(_,i)=>Array(S.data.columns.length).fill("").map((v,j)=>j===0&&/번호/.test(S.data.columns[0])?String(i+1):"")); S.dataKey="custom"; S.problemFromEx=false; dataChanged(); render(); toast("표의 값을 모두 지웠어요."); }
+    if(t.dataset.armed){ S.data.rows=Array.from({length:10},(_,i)=>Array(S.data.columns.length).fill("").map((v,j)=>"")); S.dataKey="custom"; S.problemFromEx=false; dataChanged(); render(); toast("표의 값을 모두 지웠어요."); }
     else { t.dataset.armed="1"; t.textContent="한 번 더 누르면 지워져요"; setTimeout(()=>{ if(t.isConnected){ delete t.dataset.armed; t.textContent="값 모두 지우기"; } },3000); }
     return; }
   if(t.dataset.delrow!==undefined){ S.data.rows.splice(+t.dataset.delrow,1); if(!S.data.rows.length)S.data.rows.push(Array(S.data.columns.length).fill("")); dataChanged(); refreshTable(); return; }
   if(t.dataset.delcol!==undefined){ if(S.data.columns.length<=1){toast("열이 하나뿐이라 지울 수 없어요.");return;} const c=+t.dataset.delcol; S.data.columns.splice(c,1); S.data.rows.forEach(r=>r.splice(c,1)); if(S.data.units)S.data.units.splice(c,1); S.an.valueCol=-1; S.an.groupCol=-2; dataChanged(); refreshTable(); return; }
   if(t.id==="resetAll"){
-    if(t.dataset.armed){ try{localStorage.removeItem(KEY);}catch(e){} S=freshState(); render(); toast("처음 상태로 되돌렸어요."); delete t.dataset.armed; t.textContent="처음 상태로 되돌리기"; }
+    if(t.dataset.armed){ try{sessionStorage.removeItem(KEY);}catch(e){} S=freshState(); render(); toast("처음 상태로 되돌렸어요."); delete t.dataset.armed; t.textContent="처음 상태로 되돌리기"; }
     else { t.dataset.armed="1"; t.textContent="한 번 더 누르면 모든 입력이 지워져요"; setTimeout(()=>{ delete t.dataset.armed; t.textContent="처음 상태로 되돌리기"; },3500); }
     return; }
 });
 document.addEventListener("input",e=>{
   const t=e.target;
   if(t.dataset.pf){ S.problem=S.problem||{}; S.problem[t.dataset.pf]=t.value; S.problemFromEx=false; save(); return; }
-  if(t.dataset.r!==undefined){ const r=+t.dataset.r,c=+t.dataset.c; S.data.rows[r][c]=t.value; if(S.dataKey==="height"||S.dataKey==="animal"){S.dataKey="custom";document.querySelectorAll(".src").forEach(s=>s.classList.remove("on"));} S.an.start="";S.an.width=""; save(); updCount(); return; }
+  if(t.dataset.r!==undefined){ const r=+t.dataset.r,c=+t.dataset.c; S.data.rows[r][c]=t.value; if(S.dataKey!=="custom"){S.dataKey="custom";document.querySelectorAll(".src").forEach(s=>s.classList.remove("on"));} S.an.start="";S.an.width=""; save(); updCount(); return; }
   if(t.dataset.u!==undefined){ S.data.units=S.data.units||[]; S.data.units[+t.dataset.u]=t.value.trim(); save(); return; }
   if(t.dataset.h!==undefined){ S.data.columns[+t.dataset.h]=t.value; save(); return; }
   if(t.id==="dTitle"){ S.data.title=t.value; save(); return; }
@@ -929,6 +974,8 @@ document.addEventListener("change",e=>{
 });
 document.addEventListener("keydown",e=>{
   const t=e.target;
+  if(e.key==="Escape"){ const m=$("#prepMenu"); if(m&&!m.hidden){ setMenu(false); $("#prepBtn").focus(); return; } }
+  if(t.classList&&t.classList.contains("pmitem")&&(e.key==="ArrowDown"||e.key==="ArrowUp")){ e.preventDefault(); const its=[...document.querySelectorAll(".pmitem")]; const i=its.indexOf(t); const n=its[(i+(e.key==="ArrowDown"?1:its.length-1))%its.length]; n.focus(); return; }
   if(e.key==="Escape"&&document.body.classList.contains("capture")){ document.body.classList.remove("capture"); return; }
   if(["clStart","clWidth","unitX","unitY","cunitIn"].includes(t.id)&&e.key==="Enter"){ t.blur(); return; }
   if(t.dataset&&t.dataset.r!==undefined&&e.key==="Enter"){
