@@ -1067,7 +1067,7 @@ async function captureReport(){
   const ta=$("#concl"); let ghost=null;
   if(ta){ ghost=document.createElement("div"); ghost.className="concl concl-print"; ghost.textContent=ta.value||" "; ta.after(ghost); ta.style.display="none"; }
   window.scrollTo(0,0);
-  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  await new Promise(r=>setTimeout(r,80));
   try{
     const rep=$("#report"), rr=rep.getBoundingClientRect();
     const blocks=[];
