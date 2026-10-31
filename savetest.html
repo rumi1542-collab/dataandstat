@@ -1026,7 +1026,9 @@ const libP={};
 function loadLib(k){
   const [src,get]=LIBS[k];
   if(get()) return Promise.resolve(get());
-  if(!libP[k]) libP[k]=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=()=>get()?res(get()):rej(new Error(k)); s.onerror=()=>{ delete libP[k]; rej(new Error(k)); }; document.head.appendChild(s); });
+  const inject=u=>new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=u; s.onload=()=>get()?res(get()):rej(new Error(k)); s.onerror=()=>rej(new Error(k)); document.head.appendChild(s); });
+  /* docx는 .cjs 파일이라 그대로 불러올 수 없어 내용을 받아 자바스크립트로 실행 */
+  if(!libP[k]) libP[k]=(k==="docx"?fetch(src).then(r=>{ if(!r.ok)throw new Error(k); return r.text(); }).then(t=>inject(URL.createObjectURL(new Blob([t],{type:"text/javascript"})))):inject(src)).catch(e=>{ delete libP[k]; throw e; });
   return libP[k];
 }
 const canDownload=()=>location.protocol==="file:"||/(^|\.)github\.io$|(^|\.)vercel\.app$|^localhost$|^127\.0\.0\.1$/.test(location.hostname);
@@ -1061,6 +1063,7 @@ async function captureReport(){
   const h2c=await loadLib("h2c");
   const root=document.documentElement, prevTheme=root.getAttribute("data-theme"), wasCap=document.body.classList.contains("capture"), sy=window.scrollY;
   root.setAttribute("data-theme","light"); document.body.classList.add("capture");
+  const repEl=$("#report"), prevW=repEl.style.width; repEl.style.width="820px";
   const ta=$("#concl"); let ghost=null;
   if(ta){ ghost=document.createElement("div"); ghost.className="concl concl-print"; ghost.textContent=ta.value||" "; ta.after(ghost); ta.style.display="none"; }
   window.scrollTo(0,0);
@@ -1090,6 +1093,7 @@ async function captureReport(){
       return {canvas:c,view:b.classList.contains("rp-view")};
     });
   } finally {
+    repEl.style.width=prevW;
     if(ghost){ ghost.remove(); ta.style.display=""; }
     if(prevTheme===null) root.removeAttribute("data-theme"); else root.setAttribute("data-theme",prevTheme);
     if(!wasCap) document.body.classList.remove("capture");
