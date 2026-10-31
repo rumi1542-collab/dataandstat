@@ -101,13 +101,17 @@ button,input,select,textarea{font:inherit;color:inherit}
 .pmnote{margin:0;padding:6px 10px 4px;font-size:12px;color:var(--muted)}
 .confirm{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--warn-soft);color:var(--warn);border-radius:var(--r);padding:10px 14px;font-size:14px}
 .confirm .cbtns{display:flex;gap:8px}
-.savebar{justify-content:space-between;align-items:flex-start}
+.hbtns{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
 .savewrap{position:relative}
 .savebtn{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
 .savebtn:disabled{opacity:.7;cursor:progress}
-.savemenu{top:calc(100% + 6px);right:0;width:270px}
-.savemenu .pmitem b{display:block;font-weight:600}
-.savemenu .pmitem small{display:block;font-size:12px;color:var(--muted);font-weight:400}
+.savemenu{top:calc(100% + 8px);right:0;width:300px;padding:8px;border:1.5px solid var(--accent);box-shadow:0 12px 32px rgba(0,0,0,.22);z-index:60}
+.savemenu .pmitem{padding:12px 12px;gap:12px;justify-content:flex-start;border-bottom:1px solid var(--line);border-radius:0}
+.savemenu .pmitem:last-child{border-bottom:0}
+.savemenu .pmitem:hover,.savemenu .pmitem:focus-visible{background:var(--accent-soft);border-radius:8px}
+.fmt{flex:none;font-family:var(--f-mono);font-size:11.5px;font-weight:600;letter-spacing:.04em;padding:4px 7px;border-radius:6px;background:var(--accent);color:var(--accent-ink);min-width:44px;text-align:center}
+.savemenu .pmitem b{display:block;font-weight:600;font-size:15px}
+.savemenu .pmitem small{display:block;font-size:12.5px;color:var(--muted);font-weight:400;margin-top:1px}
 .whoerr{flex-basis:100%;text-align:right;font-size:13px;color:var(--warn)}
 .rp-head .who input.err{border-bottom:2px solid var(--warn)}
 .concl-print{white-space:pre-wrap;min-height:60px}
@@ -913,7 +917,15 @@ function viewResult(){
     <tr><td>최빈값</td>${G.groups.map(g=>{const r=modes(g.values);return `<td class="num">${r.allSame?"–":r.modes.map(esc).join(", ")}</td>`;}).join("")}</tr>
     </tbody></table></div>${num&&G.unit?`<p class="note" style="text-align:center;margin:6px 0 0">단위: ${esc(G.unit)}</p>`:""}`:"";
   return header(4,"결과 해석","분석한 내용을 바탕으로 처음 질문에 답해 보세요. 아래 보고서는 화면 캡처해서 제출하기 좋게 정리돼 있어요.",
-    `<button class="btn no-cap" id="capBtn" type="button">캡처 화면으로 보기</button>`)+
+    `<div class="hbtns no-cap"><button class="btn" id="capBtn" type="button">캡처 화면으로 보기</button>
+    <div class="savewrap" id="saveWrap"><button class="btn savebtn" id="saveBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="saveMenu"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m-3.5-3.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>보고서 저장<svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+      <div class="prepmenu savemenu" id="saveMenu" role="menu" hidden>${canDownload()?`
+        <button class="pmitem" role="menuitem" data-save="pdf" type="button"><span class="fmt">PDF</span><span><b>PDF</b><small>보고서 화면 그대로 · 제출용</small></span></button>
+        <button class="pmitem" role="menuitem" data-save="xlsx" type="button"><span class="fmt">XLSX</span><span><b>엑셀</b><small>원자료와 표를 시트별로</small></span></button>
+        <button class="pmitem" role="menuitem" data-save="docx" type="button"><span class="fmt">DOCX</span><span><b>워드</b><small>그래프 포함 · 이어서 고쳐 쓰기</small></span></button>`:`
+        <p class="pmnote" style="font-size:13px;color:var(--ink)">이 화면에서는 파일을 저장할 수 없어요. 학생용 주소에서 저장해 주세요.</p>
+        <p class="pmnote">rumi1542-collab.github.io/dataandstat<br>dataandstat.vercel.app</p>`}
+      </div></div></div>`)+
   `<div class="card report" id="report">
     <div class="rp-head"><h2>통계 탐구 보고서</h2><label class="who" for="rpWho">이름 / 모둠 <input id="rpWho" value="${esc(S.result.who)}" placeholder="이름을 적으세요"></label><span class="whoerr no-cap" id="whoErr" hidden role="alert">이름 / 모둠을 먼저 적어야 저장할 수 있어요.</span></div>
     <div class="rsec"><h3><span class="no">1</span>문제 설정</h3>${rows.length?`<dl class="kv">${rows.map(r=>`<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join("")}</dl>`:`<p class="muted small" style="margin:0">문제 설정 탭에서 통계적 질문을 적어 주세요.</p>`}</div>
@@ -924,15 +936,7 @@ function viewResult(){
       <textarea id="concl" class="concl" placeholder="질문에 대한 답과 그렇게 생각한 근거(그래프, 대푯값)를 적어 보세요.">${esc(S.result.text)}</textarea>
     </div>
   </div>
-  <div class="row no-cap savebar"><button class="btn" data-go="analyze" type="button">← 자료 분석</button>
-    <div class="savewrap" id="saveWrap"><button class="btn savebtn" id="saveBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="saveMenu"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m-3.5-3.5L8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>보고서 저장<svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
-      <div class="prepmenu savemenu" id="saveMenu" role="menu" hidden>${canDownload()?`
-        <button class="pmitem" role="menuitem" data-save="pdf" type="button"><span><b>PDF</b><small>보고서 화면 그대로 · 제출용</small></span></button>
-        <button class="pmitem" role="menuitem" data-save="xlsx" type="button"><span><b>엑셀</b><small>원자료와 표를 시트별로</small></span></button>
-        <button class="pmitem" role="menuitem" data-save="docx" type="button"><span><b>워드</b><small>그래프 포함 · 이어서 고쳐 쓰기</small></span></button>`:`
-        <p class="pmnote" style="font-size:13px;color:var(--ink)">이 화면에서는 파일을 저장할 수 없어요. 학생용 주소에서 저장해 주세요.</p>
-        <p class="pmnote">rumi1542-collab.github.io/dataandstat<br>dataandstat.vercel.app</p>`}
-      </div></div></div>`;
+  <div class="row no-cap"><button class="btn" data-go="analyze" type="button">← 자료 분석</button></div>`;
 }
 function autoGrow(t){ if(!t)return; t.style.height="auto"; t.style.height=Math.max(130,t.scrollHeight+4)+"px"; }
 
