@@ -1080,7 +1080,7 @@ async function captureReport(){
     }
     const origSvgs=[...rep.querySelectorAll("svg")];
     const PROPS=["fill","fill-opacity","stroke","stroke-width","stroke-opacity","stroke-linejoin","opacity","font-size","font-family","font-weight","display"];
-    const canvas=await h2c(rep,{scale:2,backgroundColor:"#ffffff",logging:false,windowWidth:document.documentElement.scrollWidth,windowHeight:document.documentElement.scrollHeight,
+    const canvas=await h2c(rep,{scale:2,backgroundColor:"#ffffff",logging:false,windowWidth:window.innerWidth,windowHeight:document.documentElement.scrollHeight,
       onclone:doc=>{
         const cs=[...doc.querySelectorAll("#report svg")];
         cs.forEach((c,i)=>{ const o=origSvgs[i]; if(!o)return; const r=o.getBoundingClientRect(); c.setAttribute("width",r.width); c.setAttribute("height",r.height);
