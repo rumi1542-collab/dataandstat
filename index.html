@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.5 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>통계 탐구실</title>
+<title>통계적 문제해결</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
@@ -289,7 +289,7 @@ body.capture .cap-exit{display:inline-flex;position:fixed;top:calc(12px + env(sa
 <body>
 <div class="app">
   <nav class="side" aria-label="탐구 단계">
-    <div class="brand"><b>통계 탐구실</b><span>문제 설정부터 결과 해석까지</span></div>
+    <div class="brand"><b>통계적 문제해결</b><span>문제 설정부터 결과 해석까지</span></div>
     <ul class="steps" role="tablist">
       <li><button class="step" role="tab" data-tab="problem" id="t-problem"><span class="no">1</span>문제 설정</button></li>
       <li><button class="step" role="tab" data-tab="collect" id="t-collect"><span class="no">2</span>자료 수집</button></li>
@@ -1186,7 +1186,8 @@ async function savePNG(){
   const blob=await new Promise(r=>c.toBlob(r,"image/png"));
   downloadBlob(blob,saveFileName("png"));
 }
-const WORK_APP="통계 탐구실";
+const WORK_APP="통계적 문제해결";
+const WORK_APP_OLD="통계 탐구실";   // 예전에 저장한 작업 파일도 열 수 있게 이전 이름을 함께 받아요
 function saveWork(){
   const data={app:WORK_APP,version:1,savedAt:new Date().toISOString(),state:S};
   downloadBlob(new Blob([JSON.stringify(data,null,1)],{type:"application/json"}),saveFileName("json"));
@@ -1211,8 +1212,8 @@ function loadWorkFile(file){
   const fr=new FileReader();
   fr.onload=()=>{
     let st;
-    try{ const d=JSON.parse(String(fr.result).replace(/^\uFEFF/,"")); if(!d||d.app!==WORK_APP||!d.state) throw new Error("app"); st=normalizeState(d.state); }
-    catch(e){ toast("통계 탐구실 작업 파일이 아니에요. '보고서 저장 → 작업 파일'로 저장한 .json 파일을 골라 주세요."); return; }
+    try{ const d=JSON.parse(String(fr.result).replace(/^\uFEFF/,"")); if(!d||(d.app!==WORK_APP&&d.app!==WORK_APP_OLD)||!d.state) throw new Error("app"); st=normalizeState(d.state); }
+    catch(e){ toast("통계적 문제해결 작업 파일이 아니에요. '보고서 저장 → 작업 파일'로 저장한 .json 파일을 골라 주세요."); return; }
     if(hasAnyInput()){ pendingWork=st; const c=$("#workConfirm"); c.hidden=false; const y=$("#wcYes"); if(y)y.focus(); return; }
     applyWork(st);
   };
